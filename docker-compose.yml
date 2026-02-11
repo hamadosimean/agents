@@ -1,0 +1,204 @@
+services:
+  # ==========================
+  # Backend
+  # ==========================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: agent_backend
+    env_file:
+      - ./.env
+    expose: 
+      - "8000"
+    volumes:
+      - ./backend:/app
+      - agent_static_volumes:/app/static
+      - agent_media_volumes:/app/media
+    command: ["/app/entrypoint.sh"] 
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - agent_network
+
+  # ==========================
+  # Database
+  # ==========================
+  db:
+    image: postgres:17-alpine
+    container_name: agent_db
+    env_file:
+      - ./.env
+    ports:
+      - "5432"
+    restart: unless-stopped
+    volumes:
+      - agent_db_data:/var/lib/postgresql/data
+    networks:
+      - agent_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================
+  # Redis
+  # ==========================
+  redis:
+    image: redis:alpine
+    container_name: agent_redis
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    expose:
+      - "6379"
+    command: sh -c "redis-server --requirepass ${REDIS_PASSWORD}"
+    volumes:
+      - agent_redis_data:/data
+    networks:
+      - agent_network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================
+  # Celery Worker
+  # ==========================
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: agent_celery_worker
+    env_file:
+      - ./.env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A config worker --loglevel=info
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery -A config worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - agent_network
+
+  # ==========================
+  # Celery Beat
+  # ==========================
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: agent_celery_beat
+    env_file:
+      - ./.env
+    volumes:
+      - ./backend:/app
+      - agent_celerybeat_schedule:/app/celerybeat-schedule
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler --pidfile=/tmp/celerybeat.pid
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery -A config beat' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - agent_network
+
+  # ==========================
+  # Nginx
+  # ==========================
+  nginx:
+    build:
+      context: ./backend/nginx
+      dockerfile: Dockerfile
+    container_name: agent_nginx
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - agent_static_volumes:/app/static
+      - agent_media_volumes:/app/media
+    ports:
+      - "${APP_PORT}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - agent_network
+
+  # ----------------------------------------
+  # Prometheus
+  # ----------------------------------------
+  prometheus:
+    image: prom/prometheus
+    container_name: agent_prometheus
+    volumes:
+      - ./backend/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090"
+    networks:
+      - agent_network
+    depends_on:
+      backend:
+        condition: service_started
+  # ----------------------------------------
+  # Grafana
+  # ----------------------------------------
+  grafana:
+    image: grafana/grafana
+    container_name: agent_grafana
+    ports:
+      - "3070:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./backend/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - agent_network
+
+    depends_on:
+      prometheus:
+        condition: service_started
+# ==========================
+# Volumes
+# ==========================
+volumes:
+  agent_db_data:
+  agent_redis_data:
+  agent_media_volumes:
+  agent_static_volumes:
+  agent_celerybeat_schedule:
+  grafana_data:
+
+# ==========================
+# Networks
+# ==========================
+networks:
+  agent_network:
+    driver: bridge
