@@ -73,7 +73,7 @@ DEFAULT_FROM_EMAIL = env("EMAIL_HOST_USER")
 # Djoser setup
 DJOSER = {
     "USER_ID_FIELD": "id",
-    "LOGIN_FIELD": "phone_number",
+    "LOGIN_FIELD": "username",
     "SEND_ACTIVATION_EMAIL": False,
     "USER_CREATE_PASSWORD_RETYPE": False,
     "SET_PASSWORD_RETYPE": False,
@@ -147,3 +147,5 @@ LOGGING = {
         },
     },
 }
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")

@@ -1,7 +1,6 @@
 INSTALLED_APPS = [
     # apps insatalled
     "django_prometheus",
-    "django.contrib.gis",
     "rest_framework",
     "djoser",
     "corsheaders",
@@ -21,7 +20,8 @@ INSTALLED_APPS = [
     "health_check.contrib.migrations",
     # local apps
     "accounts",
-    "core",
     "stats",
-    "ai",
+    "data_analyst",
+    "email_agent",
+    "assistant",
 ]

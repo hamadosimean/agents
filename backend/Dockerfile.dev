@@ -1,31 +1,30 @@
-# Base file
 FROM python:3.13-slim
 
-RUN mkdir /app
-# Set the working directory
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV AGENT_ENV=development
-# Install system dependencies for PostGIS/GDAL
-RUN apt-get update && apt-get install -y \
-    gdal-bin \
-    libgdal-dev \
-    binutils \
-    libproj-dev \
-    curl \
-    procps \
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gdal-bin libgdal-dev binutils libproj-dev curl procps\
+    iputils-ping netcat-openbsd net-tools\
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install dependencies
-RUN pip install --upgrade pip 
-# Copy the requirements file into the container
-COPY requirements.txt /app/
-# Install the dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-## copy all the rest of the code to current directory
-COPY . .
-# collect static file
-# ENTRYPOINT ["./entrypoint.sh"]
+# Install dependencies (Cached layer)
 
+COPY requirements.txt .
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# Copy application code
+COPY . .
+
+ENTRYPOINT ["./entrypoint.sh"]
+
+EXPOSE 8000

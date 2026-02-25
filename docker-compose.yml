@@ -9,17 +9,21 @@ services:
     container_name: agent_backend
     env_file:
       - ./.env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
     expose: 
       - "8000"
     volumes:
       - ./backend:/app
       - agent_static_volumes:/app/static
       - agent_media_volumes:/app/media
-    command: ["/app/entrypoint.sh"] 
+    # command: ["/app/entrypoint.sh"] 
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/api/v1/health/"]
@@ -29,7 +33,38 @@ services:
 
     networks:
       - agent_network
+  #==========================
+  # Ollama
+  #==========================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agent_ollama
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - LOCAL_OLLAMA_MODEL=${LOCAL_OLLAMA_MODEL}
+    expose:
+      - "11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./backend/ollama:/ollama
+    networks:
+      - agent_network
 
+    entrypoint: ["/bin/sh", "/ollama/ollama_run.sh"]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   # ==========================
   # Database
   # ==========================
@@ -173,7 +208,7 @@ services:
     image: grafana/grafana
     container_name: agent_grafana
     ports:
-      - "3070:3000"
+      - "3080:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
@@ -195,6 +230,7 @@ volumes:
   agent_static_volumes:
   agent_celerybeat_schedule:
   grafana_data:
+  ollama_data:
 
 # ==========================
 # Networks
