@@ -36,6 +36,7 @@ def ask_assistant(request):
     Returns:
         HTTP response
     """
+
     question = request.data.get("question")
 
     if not question:
@@ -46,7 +47,7 @@ def ask_assistant(request):
 
     # Try knowledge base
     kb_prompt = build_prompt(question, KNOWLEDGE_BASE)
-    response = get_cloud_ollama_response(request, kb_prompt).strip()
+    response = get_cloud_ollama_response(kb_prompt).strip()
 
     # If KB has no answer → use web search
     if "web_search" in response:
@@ -59,7 +60,7 @@ def ask_assistant(request):
                 page["content"] for page in results if page.get("content")
             )
             web_prompt = build_web_prompt(question, combined_web_context)
-            response = get_cloud_ollama_response(request, web_prompt).strip()
+            response = get_cloud_ollama_response(web_prompt).strip()
 
         except Exception as e:
             return Response(
